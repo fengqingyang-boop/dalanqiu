@@ -9,6 +9,8 @@ const CAMERA_DISTANCE = 4
 const CAMERA_HEIGHT_OFFSET = 1.5
 const CAMERA_LOOK_AT_HEIGHT = 1.2
 
+type AnimationState = 'idle' | 'dribbling' | 'shooting' | 'dunking'
+
 class Player {
   private scene: THREE.Scene
   private physicsWorld: RAPIER.World
@@ -18,8 +20,20 @@ class Player {
   private mesh!: THREE.Group
   private rigidBody!: RAPIER.RigidBody
 
+  private leftArm!: THREE.Mesh
+  private rightArm!: THREE.Mesh
+  private leftLeg!: THREE.Mesh
+  private rightLeg!: THREE.Mesh
+
   private rotationY: number = 0
   private cameraPitch: number = 0.2
+
+  private animationState: AnimationState = 'idle'
+  private animationTime: number = 0
+  private defaultLeftArmRotation: number = 0.3
+  private defaultRightArmRotation: number = -0.3
+  private defaultLeftLegRotation: number = 0
+  private defaultRightLegRotation: number = 0
 
   constructor(
     scene: THREE.Scene,
@@ -39,14 +53,12 @@ class Player {
   private createMesh() {
     this.mesh = new THREE.Group()
 
-    // 身体
     const bodyMaterial = new THREE.MeshStandardMaterial({
       color: 0xe74c3c,
       roughness: 0.7,
       metalness: 0.1
     })
 
-    // 躯干
     const torsoHeight = PLAYER_HEIGHT * 0.4
     const torsoRadius = 0.25
     const torsoGeometry = new THREE.CapsuleGeometry(torsoRadius, torsoHeight, 4, 8)
@@ -56,7 +68,6 @@ class Player {
     torso.receiveShadow = true
     this.mesh.add(torso)
 
-    // 头部
     const headMaterial = new THREE.MeshStandardMaterial({
       color: 0xfdbcb4,
       roughness: 0.8
@@ -67,7 +78,6 @@ class Player {
     head.castShadow = true
     this.mesh.add(head)
 
-    // 帽子/头发（简化为黑色）
     const hairMaterial = new THREE.MeshStandardMaterial({
       color: 0x1a1a1a,
       roughness: 0.9
@@ -78,7 +88,6 @@ class Player {
     hair.castShadow = true
     this.mesh.add(hair)
 
-    // 眼睛指示方向（红色小点）
     const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 })
     const eyeGeometry = new THREE.SphereGeometry(0.02, 8, 8)
     
@@ -90,7 +99,6 @@ class Player {
     rightEye.position.set(0.05, PLAYER_HEIGHT * 0.82, 0.15)
     this.mesh.add(rightEye)
 
-    // 短裤
     const shortsMaterial = new THREE.MeshStandardMaterial({
       color: 0x2c3e50,
       roughness: 0.7
@@ -101,54 +109,49 @@ class Player {
     shorts.castShadow = true
     this.mesh.add(shorts)
 
-    // 腿部（简化为两个胶囊）
     const legMaterial = new THREE.MeshStandardMaterial({
       color: 0xfdbcb4,
       roughness: 0.8
     })
     const legGeometry = new THREE.CapsuleGeometry(0.08, 0.45, 4, 8)
 
-    const leftLeg = new THREE.Mesh(legGeometry, legMaterial)
-    leftLeg.position.set(-0.1, 0.45, 0)
-    leftLeg.castShadow = true
-    this.mesh.add(leftLeg)
+    this.leftLeg = new THREE.Mesh(legGeometry, legMaterial)
+    this.leftLeg.position.set(-0.1, 0.45, 0)
+    this.leftLeg.castShadow = true
+    this.mesh.add(this.leftLeg)
 
-    const rightLeg = new THREE.Mesh(legGeometry, legMaterial)
-    rightLeg.position.set(0.1, 0.45, 0)
-    rightLeg.castShadow = true
-    this.mesh.add(rightLeg)
+    this.rightLeg = new THREE.Mesh(legGeometry, legMaterial)
+    this.rightLeg.position.set(0.1, 0.45, 0)
+    this.rightLeg.castShadow = true
+    this.mesh.add(this.rightLeg)
 
-    // 手臂（简化）
     const armMaterial = new THREE.MeshStandardMaterial({
       color: 0xfdbcb4,
       roughness: 0.8
     })
     const armGeometry = new THREE.CapsuleGeometry(0.06, 0.5, 4, 8)
 
-    const leftArm = new THREE.Mesh(armGeometry, armMaterial)
-    leftArm.position.set(-0.35, PLAYER_HEIGHT * 0.55, 0)
-    leftArm.rotation.z = 0.3
-    leftArm.castShadow = true
-    this.mesh.add(leftArm)
+    this.leftArm = new THREE.Mesh(armGeometry, armMaterial)
+    this.leftArm.position.set(-0.35, PLAYER_HEIGHT * 0.55, 0)
+    this.leftArm.rotation.z = this.defaultLeftArmRotation
+    this.leftArm.castShadow = true
+    this.mesh.add(this.leftArm)
 
-    const rightArm = new THREE.Mesh(armGeometry, armMaterial)
-    rightArm.position.set(0.35, PLAYER_HEIGHT * 0.55, 0)
-    rightArm.rotation.z = -0.3
-    rightArm.castShadow = true
-    this.mesh.add(rightArm)
+    this.rightArm = new THREE.Mesh(armGeometry, armMaterial)
+    this.rightArm.position.set(0.35, PLAYER_HEIGHT * 0.55, 0)
+    this.rightArm.rotation.z = this.defaultRightArmRotation
+    this.rightArm.castShadow = true
+    this.mesh.add(this.rightArm)
 
-    // 设置初始位置
     this.mesh.position.set(0, 0, 3)
     this.scene.add(this.mesh)
   }
 
   private createPhysics() {
-    // 运动学刚体（玩家直接控制）
     const bodyDesc = this.RAPIER.RigidBodyDesc.kinematicPositionBased()
     bodyDesc.setTranslation(0, PLAYER_HEIGHT / 2, 3)
     this.rigidBody = this.physicsWorld.createRigidBody(bodyDesc)
 
-    // 胶囊碰撞体
     const colliderDesc = this.RAPIER.ColliderDesc.capsule(
       PLAYER_HEIGHT / 2 - PLAYER_RADIUS,
       PLAYER_RADIUS
@@ -159,35 +162,127 @@ class Player {
     this.physicsWorld.createCollider(colliderDesc, this.rigidBody)
   }
 
+  playDribbleAnimation() {
+    this.animationState = 'dribbling'
+    this.animationTime = 0
+  }
+
+  playShootAnimation() {
+    this.animationState = 'shooting'
+    this.animationTime = 0
+  }
+
+  playDunkAnimation() {
+    this.animationState = 'dunking'
+    this.animationTime = 0
+  }
+
+  resetAnimation() {
+    this.animationState = 'idle'
+    this.leftArm.rotation.z = this.defaultLeftArmRotation
+    this.rightArm.rotation.z = this.defaultRightArmRotation
+    this.leftArm.rotation.x = 0
+    this.rightArm.rotation.x = 0
+    this.leftLeg.rotation.x = 0
+    this.rightLeg.rotation.x = 0
+  }
+
+  private updateAnimation(dt: number) {
+    this.animationTime += dt
+
+    switch (this.animationState) {
+      case 'dribbling':
+        this.updateDribbleAnimation()
+        break
+      case 'shooting':
+        this.updateShootAnimation()
+        break
+      case 'dunking':
+        this.updateDunkAnimation()
+        break
+      case 'idle':
+      default:
+        this.updateIdleAnimation()
+        break
+    }
+  }
+
+  private updateDribbleAnimation() {
+    const phase = this.animationTime * 8
+    
+    const dribbleZ = Math.sin(phase) * 0.3 - 0.3
+    const dribbleX = Math.sin(phase) * 0.2
+    
+    this.rightArm.rotation.x = dribbleZ
+    this.rightArm.rotation.z = this.defaultRightArmRotation + dribbleX
+    
+    this.leftArm.rotation.x = dribbleZ * 0.5
+  }
+
+  private updateShootAnimation() {
+    const phase = Math.min(this.animationTime * 4, 1)
+    
+    const easeOut = 1 - Math.pow(1 - phase, 3)
+    const armUp = easeOut * 1.5
+    
+    this.rightArm.rotation.z = this.defaultRightArmRotation - armUp
+    this.leftArm.rotation.z = this.defaultLeftArmRotation + armUp
+    this.rightArm.rotation.x = -easeOut * 0.8
+    this.leftArm.rotation.x = -easeOut * 0.8
+  }
+
+  private updateDunkAnimation() {
+    const phase = Math.min(this.animationTime * 3, 1)
+    
+    if (phase < 0.3) {
+      const jumpPhase = phase / 0.3
+      const jump = jumpPhase * 0.5
+      this.rightArm.rotation.z = this.defaultRightArmRotation - jump * 1.5
+      this.leftArm.rotation.z = this.defaultLeftArmRotation + jump * 1.5
+    } else {
+      const slamPhase = (phase - 0.3) / 0.7
+      const slam = slamPhase * 2
+      this.rightArm.rotation.z = this.defaultRightArmRotation + slam
+      this.leftArm.rotation.z = this.defaultLeftArmRotation - slam
+      this.rightArm.rotation.x = slamPhase * 1.5
+      this.leftArm.rotation.x = slamPhase * 1.5
+    }
+  }
+
+  private updateIdleAnimation() {
+    const breath = Math.sin(this.animationTime * 2) * 0.05
+    this.leftArm.rotation.z = this.defaultLeftArmRotation + breath
+    this.rightArm.rotation.z = this.defaultRightArmRotation - breath
+  }
+
   move(direction: THREE.Vector3, dt: number) {
-    // 获取当前位置
     const translation = this.rigidBody.translation()
     const currentPos = new THREE.Vector3(translation.x, translation.y, translation.z)
 
-    // 计算移动距离
     const moveDistance = MOVE_SPEED * dt
     const moveDelta = direction.clone().multiplyScalar(moveDistance)
 
-    // 计算新位置
     const newPos = currentPos.add(moveDelta)
 
-    // 限制在场地内
     const courtHalfW = 7.5 - PLAYER_RADIUS
     const courtHalfL = 14 - PLAYER_RADIUS
     newPos.x = Math.max(-courtHalfW, Math.min(courtHalfW, newPos.x))
     newPos.z = Math.max(-courtHalfL, Math.min(courtHalfL, newPos.z))
 
-    // 设置运动学刚体位置
     this.rigidBody.setNextKinematicTranslation({
       x: newPos.x,
       y: PLAYER_HEIGHT / 2,
       z: newPos.z
     })
 
-    // 如果有移动方向，更新朝向
     if (direction.length() > 0.01) {
       const angle = Math.atan2(direction.x, direction.z)
       this.rotationY = angle
+
+      const walkPhase = this.animationTime * 10
+      const legSwing = Math.sin(walkPhase) * 0.3
+      this.leftLeg.rotation.x = legSwing
+      this.rightLeg.rotation.x = -legSwing
     }
   }
 
@@ -196,7 +291,6 @@ class Player {
     this.rotationY += deltaX * sensitivity
     this.cameraPitch += deltaY * sensitivity
 
-    // 限制俯仰角
     this.cameraPitch = Math.max(-0.5, Math.min(1.2, this.cameraPitch))
   }
 
@@ -204,7 +298,6 @@ class Player {
     const translation = this.rigidBody.translation()
     const playerPos = new THREE.Vector3(translation.x, translation.y, translation.z)
 
-    // 计算相机位置（第三人称跟随，像NBA2K）
     const cameraOffset = new THREE.Vector3(
       Math.sin(this.rotationY) * CAMERA_DISTANCE,
       CAMERA_HEIGHT_OFFSET + Math.sin(this.cameraPitch) * CAMERA_DISTANCE,
@@ -213,20 +306,19 @@ class Player {
 
     const cameraPos = playerPos.clone().add(cameraOffset)
     
-    // 相机看向玩家前方一点
     const lookAtPos = new THREE.Vector3(
       playerPos.x + Math.sin(this.rotationY) * 2,
       playerPos.y + CAMERA_LOOK_AT_HEIGHT,
       playerPos.z + Math.cos(this.rotationY) * 2
     )
 
-    // 平滑移动相机
     this.camera.position.lerp(cameraPos, 0.1)
     this.camera.lookAt(lookAtPos)
   }
 
   update(dt: number) {
-    // 更新网格位置和旋转
+    this.updateAnimation(dt)
+
     const translation = this.rigidBody.translation()
     
     this.mesh.position.set(
@@ -236,7 +328,6 @@ class Player {
     )
     this.mesh.rotation.y = this.rotationY
 
-    // 更新相机
     this.updateCamera()
   }
 
@@ -250,14 +341,18 @@ class Player {
   }
 
   getHandPosition(): THREE.Vector3 {
-    // 计算手的位置（前方和上方）
     const translation = this.rigidBody.translation()
     const handHeight = PLAYER_HEIGHT * 0.65
     const handForward = 0.6
 
+    let heightOffset = 0
+    if (this.animationState === 'shooting' || this.animationState === 'dunking') {
+      heightOffset = 0.3
+    }
+
     return new THREE.Vector3(
       translation.x + Math.sin(this.rotationY) * handForward,
-      handHeight,
+      handHeight + heightOffset,
       translation.z + Math.cos(this.rotationY) * handForward
     )
   }

@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import RAPIER from '@dimforge/rapier3d-compat'
+import type RAPIER from '@dimforge/rapier3d-compat'
 import Player from './Player'
 import Basketball from './Basketball'
 import Hoop from './Hoop'
@@ -103,21 +103,16 @@ class Game {
 
     const RAP = this.initRAPIER
 
-    // 场景管理（灯光、地面等）
     this.sceneManager = new SceneManager(this.scene, this.physicsWorld, RAP)
     this.sceneManager.createCourt()
 
-    // 篮筐（设置在球场远端）
     const hoopPosition = new THREE.Vector3(0, 0, -COURT_LENGTH / 2 + 1)
     this.hoop = new Hoop(this.scene, this.physicsWorld, RAP, hoopPosition)
 
-    // 篮球
     this.basketball = new Basketball(this.scene, this.physicsWorld, RAP)
 
-    // 玩家
     this.player = new Player(this.scene, this.physicsWorld, RAP, this.camera)
 
-    // UI控制器
     this.uiController = new UIController()
   }
 
@@ -132,12 +127,10 @@ class Game {
   private setupEventListeners() {
     window.addEventListener('resize', () => this.onWindowResize())
 
-    // 鼠标事件
     this.renderer.domElement.addEventListener('mousedown', (e) => this.onMouseDown(e))
     window.addEventListener('mouseup', (e) => this.onMouseUp(e))
     window.addEventListener('mousemove', (e) => this.onMouseMove(e))
 
-    // 键盘事件
     window.addEventListener('keydown', (e) => this.onKeyDown(e))
     window.addEventListener('keyup', (e) => this.onKeyUp(e))
   }
@@ -163,15 +156,12 @@ class Game {
     if (this.aimIndicator) {
       this.aimIndicator.style.display = 'block'
     }
-    
-    this.inputHandler.lockMouse()
   }
 
   private onMouseUp(e: MouseEvent) {
     if (e.button !== 0 || this.gameState !== 'aiming') return
     
     this.shootBall()
-    this.inputHandler.unlockMouse()
     
     if (this.powerBarContainer) {
       this.powerBarContainer.style.display = 'none'
@@ -204,38 +194,46 @@ class Game {
     }
   }
 
-  private onKeyUp(_e: KeyboardEvent) {
-    // 可以处理按键释放的逻辑
-  }
+  private onKeyUp(_e: KeyboardEvent) {}
 
   private dribbleBall() {
-    if (!this.basketball) return
+    if (!this.basketball || !this.player) return
+    
+    this.ballInHand = false
+    this.player.playDribbleAnimation()
     this.basketball.dribble()
+    
+    setTimeout(() => {
+      const ballVel = this.basketball.getVelocity()
+      if (ballVel.y > 0) {
+        setTimeout(() => {
+          this.ballInHand = true
+          this.player.resetAnimation()
+        }, 300)
+      }
+    }, 200)
   }
 
   private shootBall() {
-    if (!this.ballInHand || !this.basketball) return
+    if (!this.ballInHand || !this.basketball || !this.player) return
 
     this.gameState = 'shooting'
     this.ballInHand = false
+    this.player.playShootAnimation()
 
-    // 计算投篮力
     const minPower = 8
     const maxPower = 25
     const shootPower = minPower + (this.power / 100) * (maxPower - minPower)
 
-    // 计算方向
     const cameraDirection = new THREE.Vector3()
     this.camera.getWorldDirection(cameraDirection)
     cameraDirection.y = 0
     cameraDirection.normalize()
 
-    // 应用瞄准角度
     const rotationMatrix = new THREE.Matrix4()
     rotationMatrix.makeRotationY(this.aimAngle)
     cameraDirection.applyMatrix4(rotationMatrix)
 
-    // 垂直角度
     const baseVertical = 0.4 + this.aimVertical
     const direction = new THREE.Vector3(
       cameraDirection.x,
@@ -245,48 +243,55 @@ class Game {
 
     const velocity = direction.multiplyScalar(shootPower)
     
-    // 添加一点随机偏移，增加真实感
+    if (this.inputHandler.isPlayerMoving()) {
+      const moveDir = this.inputHandler.getLastMoveDirection()
+      const rotationY = this.player.getRotationY()
+      const cos = Math.cos(rotationY)
+      const sin = Math.sin(rotationY)
+      const worldMoveDir = new THREE.Vector3(
+        moveDir.x * cos - moveDir.z * sin,
+        0,
+        moveDir.x * sin + moveDir.z * cos
+      )
+      velocity.add(worldMoveDir.multiplyScalar(3))
+    }
+    
     velocity.x += (Math.random() - 0.5) * 0.5
     velocity.z += (Math.random() - 0.5) * 0.5
 
-    this.basketball.shoot(velocity, this.player.getPosition())
+    this.basketball.shoot(velocity, this.player.getHandPosition())
 
-    // 重置游戏状态
     setTimeout(() => {
       this.gameState = 'playing'
+      this.player.resetAnimation()
     }, 500)
 
-    // 检查是否进球
     setTimeout(() => {
       this.checkForScore()
     }, 2000)
   }
 
   private performDunk() {
-    if (!this.canDunk || !this.ballInHand) return
+    if (!this.canDunk || !this.ballInHand || !this.player || !this.basketball || !this.hoop) return
 
     this.gameState = 'dunking'
     this.ballInHand = false
     this.canDunk = false
+    this.player.playDunkAnimation()
 
     if (this.dunkHint) {
       this.dunkHint.style.display = 'none'
     }
 
-    // 扣篮动画
-    const ballPos = this.basketball.getPosition()
     const hoopPos = this.hoop.getRimCenter()
-
-    // 瞬间把球移动到篮筐并赋予向下速度
     const dunkPosition = new THREE.Vector3(hoopPos.x, hoopPos.y - 0.5, hoopPos.z)
     this.basketball.dunk(dunkPosition)
 
-    // 得分
     this.addScore(2)
 
-    // 恢复游戏状态
     setTimeout(() => {
       this.gameState = 'playing'
+      this.player.resetAnimation()
     }, 1000)
   }
 
@@ -295,7 +300,6 @@ class Game {
       const ballPos = this.basketball.getPosition()
       const rimCenter = this.hoop.getRimCenter()
       
-      // 简单的进球检测：球在篮筐中心一定范围内且向下运动
       const horizontalDist = Math.sqrt(
         Math.pow(ballPos.x - rimCenter.x, 2) + 
         Math.pow(ballPos.z - rimCenter.z, 2)
@@ -393,11 +397,9 @@ class Game {
   private updatePhysics(dt: number) {
     if (!this.rapierInitialized) return
 
-    // 物理世界步进
     this.physicsWorld.timestep = dt
     this.physicsWorld.step()
 
-    // 更新物体位置
     if (this.basketball && !this.ballInHand) {
       this.basketball.update()
     }
@@ -417,25 +419,12 @@ class Game {
   private gameLoop() {
     const dt = Math.min(this.clock.getDelta(), 0.05)
 
-    // 更新输入
     this.inputHandler.update(dt)
-
-    // 更新蓄力条
     this.updatePowerBar()
-
-    // 检查扣篮范围
     this.checkDunkRange()
-
-    // 更新持球状态
     this.updateBallInHand()
-
-    // 检查捡球
     this.checkBallPickup()
-
-    // 物理更新
     this.updatePhysics(dt)
-
-    // 渲染
     this.render()
   }
 }
