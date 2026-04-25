@@ -199,19 +199,39 @@ class Game {
   private dribbleBall() {
     if (!this.basketball || !this.player) return
     
+    const handPos = this.player.getHandPosition()
+    
     this.ballInHand = false
     this.player.playDribbleAnimation()
-    this.basketball.dribble()
+    
+    this.basketball.setPosition(new THREE.Vector3(handPos.x, handPos.y - 0.2, handPos.z))
+    this.basketball.dribbleForceUp()
     
     setTimeout(() => {
-      const ballVel = this.basketball.getVelocity()
-      if (ballVel.y > 0) {
-        setTimeout(() => {
-          this.ballInHand = true
-          this.player.resetAnimation()
-        }, 300)
-      }
-    }, 200)
+      this.checkAutoPickup()
+    }, 800)
+  }
+
+  private checkAutoPickup() {
+    if (this.ballInHand || !this.basketball || !this.player) return
+    
+    const ballPos = this.basketball.getPosition()
+    const ballVel = this.basketball.getVelocity()
+    const speed = Math.sqrt(ballVel.x * ballVel.x + ballVel.y * ballVel.y + ballVel.z * ballVel.z)
+    
+    if (ballVel.y < 0 && ballPos.y < 1.5) {
+      setTimeout(() => {
+        this.ballInHand = true
+        this.player.resetAnimation()
+      }, 200)
+    } else if (speed < 2) {
+      this.ballInHand = true
+      this.player.resetAnimation()
+    } else {
+      setTimeout(() => {
+        this.checkAutoPickup()
+      }, 200)
+    }
   }
 
   private shootBall() {
