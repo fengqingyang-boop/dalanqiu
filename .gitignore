@@ -1,0 +1,17 @@
+# 忽略自动化提交流程脚本
+submit_pr.bat
+
+# 常用的 IDE 和系统忽略项
+.idea/
+.vscode/
+*.suo
+*.ntvs
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+submit_pr.bat 
+submit_pr.bat 
+node_modules/
+submit_pr.bat 
