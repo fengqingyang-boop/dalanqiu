@@ -11,6 +11,11 @@ class InputHandler {
   private moveSpeed: number = 0
   private isMoving: boolean = false
 
+  private isRightMouseDown: boolean = false
+  private lastMouseX: number = 0
+  private lastMouseY: number = 0
+  private mouseMoved: boolean = false
+
   constructor(
     domElement: HTMLElement,
     _camera: THREE.PerspectiveCamera,
@@ -23,7 +28,6 @@ class InputHandler {
   }
 
   private setupEventListeners() {
-    // 键盘事件
     window.addEventListener('keydown', (e) => {
       this.keys[e.key.toLowerCase()] = true
       if (e.key === ' ') {
@@ -35,23 +39,48 @@ class InputHandler {
       this.keys[e.key.toLowerCase()] = false
     })
 
-    // 鼠标移动 - 指针锁定时控制视角
     document.addEventListener('mousemove', (e) => {
       if (this.pointerLocked) {
         const deltaX = e.movementX || (e as any).mozMovementX || (e as any).webkitMovementX || 0
         const deltaY = e.movementY || (e as any).mozMovementY || (e as any).webkitMovementY || 0
+        
         this.player.rotateCamera(deltaX, deltaY)
+        this.mouseMoved = true
+      } else if (this.isRightMouseDown) {
+        const deltaX = e.clientX - this.lastMouseX
+        const deltaY = e.clientY - this.lastMouseY
+        this.lastMouseX = e.clientX
+        this.lastMouseY = e.clientY
+        
+        this.player.rotateCamera(deltaX, deltaY)
+        this.mouseMoved = true
       }
     })
 
-    // 点击游戏区域进入指针锁定
-    this.domElement.addEventListener('click', () => {
-      if (!this.pointerLocked) {
+    this.domElement.addEventListener('mousedown', (e) => {
+      if (e.button === 2) {
+        this.isRightMouseDown = true
+        this.lastMouseX = e.clientX
+        this.lastMouseY = e.clientY
+      }
+    })
+
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 2) {
+        this.isRightMouseDown = false
+      }
+    })
+
+    this.domElement.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+    })
+
+    this.domElement.addEventListener('click', (e) => {
+      if (!this.pointerLocked && !this.isRightMouseDown) {
         this.domElement.requestPointerLock()
       }
     })
 
-    // 指针锁定状态变化
     document.addEventListener('pointerlockchange', () => {
       this.pointerLocked = document.pointerLockElement === this.domElement
     })
@@ -63,6 +92,14 @@ class InputHandler {
 
   isPointerLocked(): boolean {
     return this.pointerLocked
+  }
+
+  isRightMousePressed(): boolean {
+    return this.isRightMouseDown
+  }
+
+  hasMouseMoved(): boolean {
+    return this.mouseMoved
   }
 
   getLastMoveDirection(): THREE.Vector3 {

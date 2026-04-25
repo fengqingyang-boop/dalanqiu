@@ -179,25 +179,35 @@ class Basketball {
   }
 
   dribble() {
-    const currentVel = this.rigidBody.linvel()
+    this.rigidBody.setLinvel(
+      { x: 0, y: DRIBBLE_FORCE, z: 0 },
+      true
+    )
     
-    // 如果球在向下运动或静止，给予向上的力
-    if (currentVel.y <= 2) {
-      this.rigidBody.setLinvel(
-        { x: currentVel.x, y: DRIBBLE_FORCE, z: currentVel.z },
-        true
-      )
-      
-      // 拍球时加入一点旋转
-      this.rigidBody.setAngvel(
-        {
-          x: (Math.random() - 0.5) * 5,
-          y: (Math.random() - 0.5) * 10,
-          z: (Math.random() - 0.5) * 5
-        },
-        true
-      )
-    }
+    this.rigidBody.setAngvel(
+      {
+        x: (Math.random() - 0.5) * 5,
+        y: (Math.random() - 0.5) * 10,
+        z: (Math.random() - 0.5) * 5
+      },
+      true
+    )
+  }
+
+  dribbleForceUp() {
+    this.rigidBody.setLinvel(
+      { x: 0, y: DRIBBLE_FORCE, z: 0 },
+      true
+    )
+    
+    this.rigidBody.setAngvel(
+      {
+        x: (Math.random() - 0.5) * 5,
+        y: (Math.random() - 0.5) * 10,
+        z: (Math.random() - 0.5) * 5
+      },
+      true
+    )
   }
 
   dunk(dunkPosition: THREE.Vector3) {
